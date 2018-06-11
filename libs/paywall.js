@@ -1,8 +1,36 @@
-$(function() {
+/********************************************************************************* 
+ * Drop in script for integrating the Aerobatic paywall with the Chargebee JS API
+ * The Chargebee JS API script should be included before this script.
+ * Other than the Chargebee JS API, the only other dependency is window.fetch. If
+ * you need to support browsers that don't support fetch, you should include a polyfill.
+ * Here's the final set of script declarations:
+ * 
+ *  <script src="https://cdnjs.cloudflare.com/ajax/libs/fetch/2.0.4/fetch.min.js" integrity="sha256-eOUokb/RjDw7kS+vDwbatNrLN8BIvvEhlLM5yogcDIo=" crossorigin="anonymous"></script>
+    <script src="https://js.chargebee.com/v2/chargebee.js"></script>
+    <script src="https://cdn.aerobatic.com/js-libs/v1.0.0/paywall.min.js"
+      data-paywall-script
+      data-paywall-path="/paywall"
+      data-paywall-auth0-path="/members"></script>
+
+* Read more at https://www.aerobatic.com/docs/paywall/paywall-js-script/
+**********************************************************************************/
+
+// Polyfill for NodeList.forEach
+// https://developer.mozilla.org/en-US/docs/Web/API/NodeList/forEach#Polyfill
+if (window.NodeList && !NodeList.prototype.forEach) {
+  NodeList.prototype.forEach = function(callback, thisArg) {
+    thisArg = thisArg || window;
+    for (var i = 0; i < this.length; i++) {
+      callback.call(thisArg, this[i], i, this);
+    }
+  };
+}
+
+(function() {
   var queryParams = parseQuery(location.search);
   var loggedInUser = getLoggedInUser();
 
-  var paywallScript = $("script[data-paywall-script]");
+  var paywallScript = document.querySelector("script[data-paywall-script]");
 
   var isLocalhost =
     location.hostname === "127.0.0.1" || location.hostname === "localhost";
@@ -13,8 +41,8 @@ $(function() {
     window.__aerobatic__.chargebeeSiteName;
 
   var chargebeeSite;
-  var paywallPath = paywallScript.data("paywall-path");
-  var auth0Path = paywallScript.data("paywall-auth0-path");
+  var paywallPath = paywallScript.getAttribute("data-paywall-path");
+  var auth0Path = paywallScript.getAttribute("data-paywall-auth0-path");
 
   if (isConfiguredCorrectly) {
     chargebeeSite = window.__aerobatic__.chargebeeSiteName;
@@ -44,41 +72,83 @@ $(function() {
   // Show logged-in or anonymous blocks based on if there is a
   // loggedInUser
   if (loggedInUser) {
-    $("[data-paywall-username]").text(loggedInUser.nickname);
-    $("[data-paywall-logout]").on("click", onLogoutClick);
-    $("[data-paywall-subscribe]").on("click", onSubscribeClick);
+    document
+      .querySelectorAll("[data-paywall-username]")
+      .forEach(function(elem) {
+        elem.innerText = loggedInUser.nickname;
+      });
+
+    var logoutButton = document.querySelector("[data-paywall-logout");
+    if (logoutButton) {
+      logoutButton.addEventListener("click", onLogoutClick);
+    }
+
+    document
+      .querySelectorAll("[data-paywall-subscribe]")
+      .forEach(function(elem) {
+        elem.addEventListener("click", onSubscribeClick);
+      });
+
     // Only show the billing portal link if the logged-in user has subscriptions. Each
     // subscription is represented by a role.
-    if (
-      loggedInUser &&
+    var hasSubscriptions =
       loggedInUser.authorization &&
-      loggedInUser.authorization.roles.length > 0
-    ) {
-      $("[data-paywall-billing-portal]").on("click", onBillingPortalClick);
-    } else {
-      $("[data-paywall-billing-portal]").hide();
-    }
-    $("[data-paywall-logged-in]").css("display", "block");
-  } else {
-    $("[data-paywall-anonymous]").css("display", "block");
-    $("[data-paywall-signup]").attr(
-      "href",
-      auth0Path + "?initial_screen=signUp"
+      loggedInUser.authorization.roles &&
+      loggedInUser.authorization.roles.length > 0;
+
+    var billingPortalButton = document.querySelector(
+      "[data-paywall-billing-portal]"
     );
-    $("[data-paywall-login]").attr("href", auth0Path + "?initial_screen=login");
+    if (billingPortalButton) {
+      if (!hasSubscriptions) {
+        billingPortalButton.style.display = "none";
+      } else {
+        billingPortalButton.addEventListener("click", onBillingPortalClick);
+      }
+    }
+
+    document
+      .querySelectorAll("[data-paywall-logged-in]")
+      .forEach(function(elem) {
+        elem.style.display = "block";
+      });
+  } else {
+    // Display blocks of content intended for anonymous users only
+    document
+      .querySelectorAll("[data-paywall-anonymous]")
+      .forEach(function(elem) {
+        elem.style.display = "block";
+      });
+
+    document.querySelectorAll("[data-paywall-signup]").forEach(function(elem) {
+      elem.setAttribute("href", auth0Path + "?initial_screen=signUp");
+    });
+
+    document.querySelectorAll("[data-paywall-login]").forEach(function(elem) {
+      elem.setAttribute("href", auth0Path + "?initial_screen=login");
+    });
   }
 
   // Bind the query parameters passed to the thank you screen to corresponding
   // data-paywall-* elements.
   if (location.pathname === paywallPath + "/subscribe-thankyou") {
-    $("[data-paywall-thankyou-plan-id]").text(queryParams.plan_id);
-    $("[data-paywall-thankyou-subscription-id]").text(
-      queryParams.subscription_id
-    );
-    $("[data-paywall-thankyou-return-url]").attr(
-      "href",
-      queryParams.return_url
-    );
+    document
+      .querySelectorAll("[data-paywall-thankyou-plan-id]")
+      .forEach(function(elem) {
+        elem.innerText = queryParams.plan_id;
+      });
+
+    document
+      .querySelectorAll("[data-paywall-thankyou-subscription-id]")
+      .forEach(function(elem) {
+        elem.innerText = queryParams.subscription_id;
+      });
+
+    document
+      .querySelectorAll("[data-paywall-thankyou-return-url]")
+      .forEach(function(elem) {
+        elem.setAttribute("href", queryParams.return_url);
+      });
   }
 
   function getLoggedInUser() {
@@ -87,7 +157,7 @@ $(function() {
     // Parse the user object from the document.cookie
     var user;
 
-    var userMatch = document.cookie.match(/[; ]?user=([^\s;]*)/);
+    var userMatch = document.cookie.match(/[; ]?user=([^;]+)/);
     if (userMatch && userMatch.length > 1) {
       user = JSON.parse(unescape(userMatch[1]));
     }
@@ -119,10 +189,10 @@ $(function() {
       return displayMisconfiguredAlert();
     }
 
-    var planId = $(this).data("paywall-plan-id");
+    var planId = this.getAttribute("data-paywall-plan-id");
 
     // Allow the paid content to live at a different url.
-    var contentUrl = $(this).data("paywall-content-url");
+    var contentUrl = this.getAttribute("data-paywall-content-url");
     if (!contentUrl) {
       contentUrl = location.href;
     }
@@ -178,7 +248,7 @@ $(function() {
       subscriptionCancelled: function(data) {
         // Tell Aerobatic that the Chargebee subscription has changed. Behind the scenes, Aerobatic
         // will update the auth0 roles to match the active subscriptions.
-        fetch(paywallPath + "/subscription-cancelled", {
+        return fetch(paywallPath + "/subscription-cancelled", {
           method: "POST",
           headers: {
             "Content-Type": "application/json"
@@ -202,4 +272,4 @@ $(function() {
     }
     return query;
   }
-});
+})();
